@@ -1,7 +1,5 @@
 package tree
 
-import "fmt"
-
 type BPlusTree struct {
 	root *Node
 }
@@ -14,15 +12,12 @@ func NewBPlusTree() *BPlusTree {
 
 func (tree *BPlusTree) Insert(key int, value any) {
 	root := tree.root
-	fmt.Printf("Insert root: %v key: %d\n", root, key)
 	if len(root.keys) == MaxKeys {
 		// 根が分割される
 		newRoot := NewNode(false)
 		newRoot.children = append(newRoot.children, root)
-		fmt.Printf("Insert: %v\n", newRoot)
 		tree.splitChild(newRoot, 0)
 		tree.root = newRoot
-		fmt.Printf("split root: %v, %d\n", root, key)
 	}
 	tree.insertNonFull(tree.root, key, value)
 }
@@ -30,7 +25,6 @@ func (tree *BPlusTree) Insert(key int, value any) {
 func (tree *BPlusTree) insertNonFull(node *Node, key int, value any) {
 	if node.isLeaf {
 		// リーフノードにキー挿入
-		fmt.Printf("insertNonFull Reaf: %v, idx:%d\n", node, key)
 		idx := 0
 		for idx < len(node.keys) && key > node.keys[idx] {
 			idx++
@@ -44,13 +38,11 @@ func (tree *BPlusTree) insertNonFull(node *Node, key int, value any) {
 			idx++
 		}
 		if len(node.children[idx].keys) == MaxKeys {
-			fmt.Printf("insertNonFull: %v, idx:%d\n", node, idx)
 			tree.splitChild(node, idx)
 			if key > node.keys[idx] {
 				idx++
 			}
 		}
-		fmt.Printf("insertNonFull Inner: %v, idx:%d\n", node, key)
 		tree.insertNonFull(node.children[idx], key, value)
 	}
 }
@@ -64,8 +56,6 @@ func (tree *BPlusTree) splitChild(parent *Node, index int) {
 
 	// 新しいノードを作成
 	newChild := NewNode(child.isLeaf)
-
-	fmt.Printf("child: %v\n", child)
 
 	// リーフノードの場合
 	if child.isLeaf {
@@ -90,11 +80,6 @@ func (tree *BPlusTree) splitChild(parent *Node, index int) {
 	parent.keys = append(parent.keys[:index], append([]int{midKey}, parent.keys[index:]...)...)
 	parent.children = append(parent.children[:index+1], parent.children[index:]...)
 	parent.children[index+1] = newChild
-
-	fmt.Printf("split child: %v\n", child)
-	fmt.Printf("new child: %v\n", newChild)
-	fmt.Printf("parent.children: %v\n", parent.children)
-	fmt.Printf("parent.keys: %v\n", parent.keys)
 }
 
 func (tree *BPlusTree) Search(key int) (interface{}, bool) {
