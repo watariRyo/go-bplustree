@@ -262,4 +262,33 @@ func testLeafNode(t *testing.T, keys, expectedKeys []int, values, expectedValues
 	}
 }
 
-// searchのテストはmainのデバッグが実質テストになっているので、いつか移植
+func Test_Search(t *testing.T) {
+	tree := NewBPlusTree()
+
+	tree.Insert(10, "A")
+	tree.Insert(20, "B")
+	tree.Insert(5, "C")
+	tree.Insert(15, "D")
+	tree.Insert(25, "E")
+
+	expectedList := []struct {
+		key   int
+		value any
+	}{
+		{10, "A"},
+		{20, "B"},
+		{5, "C"},
+		{15, "D"},
+		{25, "E"},
+	}
+
+	for _, expected := range expectedList {
+		value, found := tree.Search(expected.key)
+		if !found {
+			t.Errorf("Could not search by key: %d.", expected.key)
+		}
+		if value != expected.value {
+			t.Errorf("Value is not set coorectly. got=%v want=%v", expected.value, value)
+		}
+	}
+}
