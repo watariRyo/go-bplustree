@@ -1,5 +1,7 @@
 package tree
 
+import "fmt"
+
 type BPlusTree struct {
 	root *Node
 }
@@ -67,7 +69,9 @@ func (tree *BPlusTree) splitChild(parent *Node, index int) {
 
 		// リーフノードを連結
 		newChild.next = child.next
+		fmt.Println("split newChi", newChild)
 		child.next = newChild
+		fmt.Println("split chi2", child)
 	} else {
 		// 内部ノードの場合
 		newChild.keys = append(newChild.keys, child.keys[mid+1:]...)
@@ -80,6 +84,8 @@ func (tree *BPlusTree) splitChild(parent *Node, index int) {
 	parent.keys = append(parent.keys[:index], append([]int{midKey}, parent.keys[index:]...)...)
 	parent.children = append(parent.children[:index+1], parent.children[index:]...)
 	parent.children[index+1] = newChild
+
+	fmt.Println(parent)
 }
 
 func (tree *BPlusTree) Search(key int) (interface{}, bool) {
@@ -108,4 +114,219 @@ func (tree *BPlusTree) Search(key int) (interface{}, bool) {
 	}
 
 	return nil, false
+}
+
+func (tree *BPlusTree) Delete(key int) bool {
+	if tree.root == nil {
+		return false // 木が空の場合
+	}
+
+	deleted := tree.deleteFromNode(tree.root, key)
+
+	// ルートが空になった場合の処理
+	if len(tree.root.keys) == 0 {
+		if !tree.root.isLeaf {
+			tree.root = tree.root.children[0] // 新しいルートに置き換え
+		} else {
+			tree.root = nil // 木全体が空
+		}
+	}
+
+	return deleted
+}
+
+func (tree *BPlusTree) deleteFromNode(node *Node, key int) bool {
+	idx := 0
+
+	// キーの位置を特定
+	for idx < len(node.keys) && key > node.keys[idx] {
+		idx++
+	}
+
+	if node.isLeaf {
+		// リーフノードの場合
+		if idx < len(node.keys) && node.keys[idx] == key {
+			// キーを削除
+			node.keys = append(node.keys[:idx], node.keys[idx+1:]...)
+			node.values = append(node.values[:idx], node.values[idx+1:]...)
+			fmt.Println("could delete", key)
+			return true
+		}
+		fmt.Println("could not delete", key)
+		return false // キーが見つからない
+	}
+
+	// 内部ノードの場合
+	if idx < len(node.keys) && node.keys[idx] == key {
+		// 内部ノードでキーが見つかった場合
+		fmt.Println("remove internal", key)
+		return tree.deleteInternalNode(node, idx)
+	}
+
+	// 子ノードに再帰的に削除を適用
+	child := node.children[idx]
+	deleted := tree.deleteFromNode(child, key)
+
+	// 再平衡処理
+	if len(child.keys) < MaxKeys/2 {
+		fmt.Println("fixup")
+		tree.fixUnderflow(node, idx)
+	}
+
+	return deleted
+}
+
+func (tree *BPlusTree) deleteInternalNode(node *Node, idx int) bool {
+	leftChild := node.children[idx]
+	rightChild := node.children[idx+1]
+
+	if len(rightChild.keys) >= MaxKeys/2 {
+		fmt.Println("right")
+		// 右の子ノードの2番目を親に昇格
+		raisingKey, _ := tree.getSecondMin(rightChild)
+		node.keys[idx] = raisingKey
+
+		successorKey, successorValue := tree.getMin(rightChild)
+		if node.isLeaf {
+			node.values[idx] = successorValue
+		}
+		// 右の子ノードから最小キーを取得して置き換え
+		tree.deleteFromNode(rightChild, successorKey)
+	} else {
+		// 左右の子ノードをマージ
+		fmt.Println("left right")
+		fmt.Println("left right node", node)
+		node, idx = tree.mergeNodes(node, idx)
+		fmt.Println("left child", leftChild)
+		fmt.Println("node keys", node.keys)
+		tree.deleteFromNode(leftChild, node.keys[idx])
+	}
+
+	// 削除後に半分より小さくなる場合、マージ処理
+	if len(rightChild.keys) < MaxKeys/2 {
+		fmt.Println("half merge")
+		fmt.Println(rightChild)
+		fmt.Println(node)
+		// 左右の子ノードをマージ
+		tree.mergeNodes(node, idx)
+	}
+
+	return true
+}
+
+func (tree *BPlusTree) fixUnderflow(parent *Node, idx int) {
+	child := parent.children[idx]
+	println(idx)
+	if idx > 0 {
+		// 左隣の兄弟ノード
+		fmt.Println("left bl")
+		leftSibling := parent.children[idx-1]
+		if len(leftSibling.keys) > MaxKeys/2 {
+			// 左の兄弟からキーを再分配
+			fmt.Println("left fix")
+			fmt.Println(child)
+			child.keys = append([]int{leftSibling.keys[len(leftSibling.keys)-1]}, child.keys...)
+			child.values = append([]any{leftSibling.values[len(leftSibling.values)-1]}, child.values...)
+			fmt.Println(child)
+			parent.keys[idx-1] = leftSibling.keys[len(leftSibling.keys)-1]
+			leftSibling.keys = leftSibling.keys[:len(leftSibling.keys)-1]
+			leftSibling.values = leftSibling.values[:len(leftSibling.values)-1]
+			return
+		}
+	}
+
+	if idx < len(parent.children)-1 {
+		// 右隣の兄弟ノード
+		fmt.Println("ri bl")
+		fmt.Println(parent.children[idx+1])
+		rightSibling := parent.children[idx+1]
+		if len(rightSibling.keys) > MaxKeys/2 {
+			// 右の兄弟からキーを再分配
+			fmt.Println("right fix")
+			child.keys = append(child.keys, parent.keys[idx])
+			child.values = append(child.values, rightSibling.values[0])
+			parent.keys[idx] = rightSibling.keys[1] // 親keyを2番目の要素に移動
+			rightSibling.keys = rightSibling.keys[1:]
+			rightSibling.values = rightSibling.values[1:]
+			return
+		}
+	}
+
+	// 再分配ができない場合、兄弟ノードとマージ
+	if idx > 0 {
+		fmt.Println("merge 1")
+		tree.mergeNodes(parent, idx-1)
+	} else {
+		fmt.Println("merge 2")
+		tree.mergeNodes(parent, idx)
+	}
+}
+
+func (tree *BPlusTree) mergeNodes(parent *Node, idx int) (*Node, int) {
+	leftChild := parent.children[idx]
+	rightChild := parent.children[idx+1]
+
+	fmt.Println("left merge child", leftChild)
+	fmt.Println("right merge child",rightChild)
+	fmt.Println("merge node parent", parent)
+
+	// 親キーを左子ノードに移動（内部ノードの場合）
+	if !leftChild.isLeaf {
+		leftChild.keys = append(leftChild.keys, parent.keys[idx])
+	}
+
+	// 右子ノードの内容を左子ノードにマージ
+	leftChild.keys = append(leftChild.keys, rightChild.keys...)
+	leftChild.values = append(leftChild.values, rightChild.values...)
+	if !leftChild.isLeaf {
+		leftChild.children = append(leftChild.children, rightChild.children...)
+	}
+	leftChild.next = rightChild.next
+
+	// root置き換えに備え保持
+	key := parent.keys[0]
+	// 親ノードを更新
+	parent.keys = append(parent.keys[:idx], parent.keys[idx+1:]...)
+	parent.children = append(parent.children[:idx+1], parent.children[idx+2:]...)
+
+	// マージ後にキー数が MaxKeys を超える場合、再分割
+	if len(leftChild.keys) > MaxKeys {
+		// 再分割を行う
+		fmt.Println("merge node", parent)
+		fmt.Println("merge node ch1", parent.children[0])
+		tree.splitChild(parent, idx)
+	}
+
+	// 更新でparentが0になった場合、唯一の子をルートにする
+	if len(parent.keys) == 0 {
+		i := 0
+		// キーの位置を再特定
+		for i < len(leftChild.keys) && key > leftChild.keys[i] {
+			i++
+		}
+		tree.root = leftChild
+		return tree.root, i
+	} else {
+		return parent, idx
+	}
+}
+
+func (tree *BPlusTree) getMin(node *Node) (int, any) {
+	current := node
+	for !current.isLeaf {
+		// 内部ノードの場合は左端の子ノードへ進む
+		current = current.children[0]
+	}
+	// リーフノードの最初のキーと値を返す
+	return current.keys[0], current.values[0]
+}
+
+func (tree *BPlusTree) getSecondMin(node *Node) (int, any) {
+	current := node
+	for !current.isLeaf {
+		// 内部ノードの場合は左端の子ノードへ進む
+		current = current.children[0]
+	}
+	// リーフノードの2番目のキーと値を返す（呼び出し元限定。エラーチェックしない）
+	return current.keys[1], current.values[1]
 }
